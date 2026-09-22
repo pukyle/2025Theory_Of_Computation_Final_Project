@@ -1,470 +1,391 @@
-# Chunked Long-Transcript Analysis with an LLM Driven by a Finite-State Machine
+<div align="center">
 
-### Theory of Computation (2025) · Final Project · NCKU CSIE
+# Your AI Relationship Analyst Agent
 
-**A relationship-analysis agent whose control flow is an explicit four-state
-machine. The state machine is not decoration: it exists because an LLM has a
-bounded context window and a chat transcript does not, so the transcript has to
-be consumed one block at a time. This README documents the design, and then
-argues — against the project's own original claim — about what class of machine
-the result actually is.**
+### A Psychological Approach to Relationship Counseling
+
+**你的專屬心理諮商師 🥰**
 
 <p>
-  <img alt="course" src="https://img.shields.io/badge/course-Theory%20of%20Computation%202025%20%C2%B7%20NCKU%20CSIE-4a3aa7">
-  <img alt="language" src="https://img.shields.io/badge/language-Python%203.10%2B-2a78d6">
-  <img alt="stack" src="https://img.shields.io/badge/stack-FastAPI%20%C2%B7%20requests-1baf7a">
-  <img alt="model" src="https://img.shields.io/badge/model-gpt--oss%3A120b%20via%20NCKU%20gateway-eda100">
-  <img alt="team" src="https://img.shields.io/badge/team%20project-3%20members-eb6834">
+  <img alt="course" src="https://img.shields.io/badge/Theory%20of%20Computation%202025-NCKU%20CSIE-2f9e5f">
+  <img alt="python" src="https://img.shields.io/badge/Python-3.10%2B-2a78d6">
+  <img alt="stack" src="https://img.shields.io/badge/FastAPI-1baf7a">
+  <img alt="model" src="https://img.shields.io/badge/gpt--oss%3A120b-eda100">
+  <img alt="team" src="https://img.shields.io/badge/team-3%20people-eb6834">
 </p>
 
-> **Live demo:** <https://two025theory-of-computation-final-svz3.onrender.com/>
-> Hosted on Render's free tier, so the first request after 15 minutes of
-> inactivity spends 30–60 seconds waking the container.
+**[▶ Try the live demo](https://two025theory-of-computation-final-svz3.onrender.com/)**
+
+<img src="docs/media/demo.gif" width="700" alt="Demo: the book opens, takes the conversation, reads it, and writes the report">
+
+<sub>The whole loop, with the thirty seconds of waiting cut out. Same clip as
+video: <a href="docs/media/demo.mp4">docs/media/demo.mp4</a></sub>
+
+<!-- To get a native inline video player instead of the GIF above: drag
+     docs/media/demo.mp4 into any github.com comment box, copy the
+     https://github.com/user-attachments/assets/... URL it produces, and paste
+     that URL on its own line here. GitHub only renders a player for those URLs;
+     it strips <video> tags from README markdown. -->
+
+</div>
 
 ---
 
-## Contents
+## What is this?
 
-- [1. The problem: a bounded window over an unbounded input](#1-the-problem-a-bounded-window-over-an-unbounded-input)
-- [2. The state machine](#2-the-state-machine)
-- [3. What class of machine is this, really?](#3-what-class-of-machine-is-this-really)
-- [4. System architecture](#4-system-architecture)
-- [5. The web layer is a second state machine](#5-the-web-layer-is-a-second-state-machine)
-- [6. The domain model](#6-the-domain-model)
-- [7. The interface](#7-the-interface)
-- [8. Discussion and limitations](#8-discussion-and-limitations)
-- [9. Building and running](#9-building-and-running)
-- [10. References](#10-references)
+Paste in a fight you had over text. Get back a report that tells you:
 
----
+- **what attachment style** each of you is showing — secure, anxious, avoidant, or disorganized
+- **which of Gottman's Four Horsemen** showed up in the messages, quoted line by line
+- **the loop you're stuck in** — who pursues, who withdraws, and how it restarts
+- **what to say instead**, rewritten sentence by sentence
 
-## 1. The problem: a bounded window over an unbounded input
+It's dressed up as a 3D book you flip through, because a wall of `<textarea>` felt
+like the wrong container for "my relationship is falling apart."
 
-The task is: given a chat transcript between two people, produce a structured
-report naming the attachment style of each party, the conflict cycle they are
-caught in, and a set of concrete suggestions.
-
-The naive implementation is one prompt: paste the whole transcript, ask for the
-report. That works for a toy input and fails for a real one, because the model
-accepts a fixed number of tokens and a transcript has no fixed length. The
-input is, for our purposes, unbounded; the thing that reads it is not.
-
-This is the same shape as the classical question of which languages a machine
-with finite memory can recognise, and it admits the same classical answer:
-if you cannot hold the input, consume it in pieces and carry a summary forward.
-The project's contribution is to make that control flow *explicit* — an
-enumerated state, a transition table, a single loop — rather than leaving it
-implicit in a chain of function calls.
+Under the hood it is a **four-state machine driving an LLM**, which is the part
+that made it a Theory of Computation project rather than a psychology one. More
+on that below — but let's start with what it actually produces.
 
 ---
 
-## 2. The state machine
+## A worked example: 夢夢 and 威威
 
-`PsychAgent.analyze()` in [`src/agent.py`](src/agent.py) is a single `while`
-loop over `self.state`. Four states, three forward edges, one self-loop:
+Everything in this section is made up. Two fictional people, one fictional
+argument, run through the real system.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/slides/slide-09.png" alt="Background: Meng and Wei"></td>
+<td width="50%"><img src="docs/slides/slide-10.png" alt="The problem, in Meng's words"></td>
+</tr>
+</table>
+
+**The setup.** 夢夢 (Meng) spent weeks preparing a 300-day-anniversary song to
+perform at the NCKU ball. 威威 (Wei) spent the performance clinging to her on
+stage. She came off furious and humiliated. He thought he was being romantic.
+
+**The evidence.** Five messages. That's the whole input.
+
+<div align="center">
+<img src="docs/slides/slide-11.png" width="820" alt="The five-message chat log">
+</div>
+
+Five messages is nothing — and the agent still has plenty to work with, because
+the psychology is in *how* things are said, not how much.
+
+### What comes back
+
+<table>
+<tr>
+<td width="50%"><img src="docs/slides/slide-12.png" alt="Attachment analysis"></td>
+<td width="50%"><img src="docs/slides/slide-13.png" alt="Four Horsemen detection"></td>
+</tr>
+<tr>
+<td><b>① Attachment style → 焦慮型 (anxious).</b> Not a label pulled from
+nowhere: it cites the emotional amplification in 「我在認真唱歌，威寶在幹嘛？」,
+the unmet need behind the 300-day gift, and the reliance on an audience to
+confirm the relationship is real.</td>
+<td><b>② The Four Horsemen, quoted.</b> Every finding carries the line that
+triggered it. 「威寶只會親親跟種草莓！台下都在看笑話！」 → <b>contempt</b>, because
+「只會」 and 「笑話」 put her above him. 「我不想跟威寶一起去日本了！」 →
+<b>defensiveness</b>, withdrawing a shared plan mid-argument.</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="50%"><img src="docs/slides/slide-14.png" alt="The vicious cycle"></td>
+<td width="50%"><img src="docs/slides/slide-15.png" alt="Concrete suggestions"></td>
+</tr>
+<tr>
+<td><b>③ The loop.</b> Her anxiety asks for visible protection → his casual
+affection reads as being ignored → her criticism lands as an attack → he
+withdraws → she feels abandoned again → back to the top. A textbook
+pursue–withdraw cycle, drawn from five messages.</td>
+<td><b>④ What to actually say.</b> This is the part people use. Stop saying
+「只會…」. Start with an I-statement. And a rewrite of her own sentence:<br><br>
+「威寶只會親親跟種草莓！這算什麼保護？」<br>→<br>「我在舞台上唱歌時感到有點不安，我很希望能感受到你的眼神或一句鼓勵。」</td>
+</tr>
+</table>
+
+<div align="center">
+<img src="docs/slides/slide-16.png" width="760" alt="Closing: download the full Markdown report">
+</div>
+
+The report closes, you download it as Markdown, and the book shuts. That last
+screen is deliberate — it is a counselling session, so it should end like one
+rather than just stopping.
+
+---
+
+## The two models it argues from
+
+The agent is not improvising psychology. It is given two published frameworks as
+literal text in the prompt, and asked to apply them and show its work.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/slides/slide-07.png" alt="Attachment theory quadrant"></td>
+<td width="50%"><img src="docs/slides/slide-08.png" alt="Gottman's Four Horsemen and antidotes"></td>
+</tr>
+<tr>
+<td><b>Attachment theory</b> — two axes, anxiety and avoidance, giving four
+quadrants. The agent places each person, then aims the advice at moving them
+toward <i>secure</i>.</td>
+<td><b>Gottman's Four Horsemen</b> — criticism, contempt, defensiveness,
+stonewalling. Each has a known antidote, and the antidotes are literally where
+§④ above comes from.</td>
+</tr>
+</table>
+
+Everything the report claims has to trace back to one of these two pictures. That
+constraint is doing a lot of work: it turns "what does the model think" into
+"where in this framework does this conversation sit", which is checkable.
+
+---
+
+## Why a state machine?
+
+Here is the problem that shaped the whole design.
+
+An LLM accepts a fixed number of tokens. A chat history does not have a fixed
+length. Paste in three years of LINE messages and the naive version — one big
+prompt — simply fails.
+
+So the agent reads the transcript the way you'd read a long book with a bad
+memory: **a chunk at a time, taking notes, then writing the review from the
+notes.**
 
 <div align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)"  srcset="docs/figures/fig1-fsm-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="docs/figures/fig1-fsm-light.png">
   <img alt="The four states of PsychAgent.analyze()"
-       src="docs/figures/fig1-fsm-light.png" width="900">
+       src="docs/figures/fig1-fsm-light.png" width="880">
 </picture>
 </div>
 
-> **Figure 1.** Transcribed directly from `State` and `PsychAgent.analyze()`.
-> `DONE` is drawn with a double ring in the usual convention for an accepting
-> state.
+Four states, three forward edges, one self-loop. The self-loop is the entire
+point: it is what lets a fixed-size reader consume an input of any length.
 
 ```python
 class State(Enum):
-    INIT = 1
-    PROCESS_CHUNK = 2
-    AGGREGATE = 3
+    INIT = 1            # cut the transcript into 50-line chunks
+    PROCESS_CHUNK = 2   # one LLM call per chunk → a short note
+    AGGREGATE = 3       # one LLM call over the notes → the report
     DONE = 4
 ```
 
 ```python
 while self.state != State.DONE:
-    if self.state == State.INIT:
-        self.chunks = self.chunk_chat_logs(max_lines=50)
-        self.current_chunk_idx = 0
-        self.partial_results = []
-        self.state = State.PROCESS_CHUNK
-
+    ...
     elif self.state == State.PROCESS_CHUNK:
         if self.current_chunk_idx < len(self.chunks):
             partial = self.process_single_chunk(self.chunks[self.current_chunk_idx])
-            if partial:
-                self.partial_results.append(f"片段 {self.current_chunk_idx + 1}: {partial}")
-            self.current_chunk_idx += 1        # ← the self-loop
+            self.partial_results.append(partial)
+            self.current_chunk_idx += 1      # ← the self-loop
         else:
-            self.state = State.AGGREGATE       # ← the only exit from the loop
-    ...
+            self.state = State.AGGREGATE     # ← the only way out
 ```
 
-The partition is by line count, not by token count: `chunk_chat_logs` splits on
-`\n` and groups 50 lines at a time. That is a proxy for a token budget, and §8
-says what is wrong with it.
+It also terminates for a reason you can state in one line: `len(self.chunks)` is
+fixed the moment `INIT` finishes, and `current_chunk_idx` only ever goes up.
 
-Each visit to `PROCESS_CHUNK` makes exactly one API call and appends one short
-feature summary — "does this fragment contain blame, avoidance, anxiety?" —
-rather than keeping the fragment itself. `AGGREGATE` then makes one final call
-over the concatenated summaries.
+<details>
+<summary><b>For people who took the course: is this actually an FSM?</b> (click)</summary>
 
----
+<br>
 
-## 3. What class of machine is this, really?
-
-The project was originally described as an FSM. That claim deserves the
-scrutiny a Theory of Computation course exists to teach, and it does not fully
-survive it.
+Not quite, and the gap is the interesting part.
 
 <div align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)"  srcset="docs/figures/fig2-machine-class-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="docs/figures/fig2-machine-class-light.png">
-  <img alt="Finite control versus unbounded store"
-       src="docs/figures/fig2-machine-class-light.png" width="900">
+  <img alt="Finite control over an unbounded store"
+       src="docs/figures/fig2-machine-class-light.png" width="880">
 </picture>
 </div>
 
-> **Figure 2.** The control is finite. The store it reads and writes is not.
+A DFA's entire memory *is* the state it's in — that's why the pumping lemma
+bites. Our configuration is the triple `(state, current_chunk_idx,
+partial_results)`, and the last two grow with the input. Four states, sure, but
+infinitely many configurations.
 
-A DFA is a finite set of states and nothing else — its entire memory *is* the
-state it is currently in, which is why the pumping lemma bites. The
-configuration of this machine is the triple
+What it really is: input consumed left to right, one block at a time, never
+revisited, one output appended per block, read only at the end. That's a
+**finite-state transducer with unbounded output**, followed by a single global
+pass. Weaker than a Turing machine (the tape is append-only and never re-read
+during the scan), stronger than a DFA (the store is unbounded).
 
-```text
-(state, current_chunk_idx, partial_results)
-```
+The web layer, on the other hand, genuinely *is* a finite automaton — see the
+next section. Two state machines, two different answers. That contrast is the
+most TOC-ish thing in the project.
 
-and `current_chunk_idx` ranges over the length of the input while
-`partial_results` grows once per chunk. The reachable configuration space is
-therefore infinite, so the system as a whole is not a finite automaton, however
-much the `State` enum looks like one.
-
-What it *is*, stated precisely:
-
-| Property | This machine |
-| --- | --- |
-| Input access | left to right, one block at a time, never revisited |
-| Control | finite — 4 states |
-| Working store | one integer counter + one append-only list |
-| Output | one string appended per input block |
-| Final step | a single global pass over the accumulated output |
-
-Read-once left-to-right input with per-block output and no re-reading is the
-shape of a **finite-state transducer with unbounded output**, followed by one
-global aggregation pass. It is strictly weaker than a Turing machine (the tape
-is append-only and never re-read during the scan) and strictly stronger than a
-DFA (the store is unbounded). Calling it "an FSM" is loose; calling it a
-transducer with an aggregation phase is both accurate and a more interesting
-thing to have built.
-
-The honest qualifier: the transition function here is not what makes the system
-interesting or unpredictable. The LLM behind `process_single_chunk` is the part
-doing the work, and it is not modelled by any of this. What the FSM buys is a
-*control* structure with an obvious termination argument — the loop advances
-`current_chunk_idx` monotonically and `len(self.chunks)` is fixed at `INIT`,
-so `PROCESS_CHUNK` is visited exactly `len(chunks) + 1` times and the machine
-always reaches `DONE`.
+</details>
 
 ---
 
-## 4. System architecture
+## How it's put together
 
 <div align="center">
-<img alt="Module dependency graph"
-     src="https://github.com/user-attachments/assets/366e0dfc-98af-49bc-ac4d-3d6fc5a334d1" width="880">
+<img src="docs/slides/slide-05.png" width="880" alt="Module dependency graph">
 </div>
 
-> **Figure 3.** Module dependency graph, from the project presentation. The
-> dependencies run in one direction only — the browser talks to FastAPI,
-> FastAPI to `WebAgent`, `WebAgent` to `PsychAgent`, and only `llm_client`
-> talks to the outside world.
-
-The separation that matters is the last one: `PsychAgent` never constructs an
-HTTP request. Everything network-shaped is behind `get_completion(messages)` in
-[`src/llm_client.py`](src/llm_client.py), 21 lines whose entire job is to POST a
-message list and return `response.json()['message']['content']`. Swapping
+Dependencies run one way only: browser → FastAPI → `WebAgent` → `PsychAgent` →
+prompts / knowledge / `llm_client` → the outside world. The one rule we actually
+held to is that **`PsychAgent` never builds an HTTP request.** Everything
+network-shaped lives in `llm_client.py`, which is 21 lines long. Swapping model
 providers is a one-file change.
 
-| Module | Responsibility | Lines |
+| File | What it does | Lines |
 | --- | --- | ---: |
-| [`src/agent.py`](src/agent.py) | `PsychAgent` (the FSM) and `ChatAgent` | 124 |
-| [`src/prompts.py`](src/prompts.py) | the analysis template and its fixed 5-section output format | 89 |
-| [`src/knowledge.py`](src/knowledge.py) | the psychological knowledge base, as literal text | 65 |
-| [`src/llm_client.py`](src/llm_client.py) | the only code that makes a network call | 21 |
-| [`src/config.py`](src/config.py) | key loading, gateway URL, model name | 28 |
-| [`web/app.py`](web/app.py) | FastAPI routes | 160 |
-| `web/static/` | the 3D-book front end | 894 |
+| `src/agent.py` | `PsychAgent` (the state machine) and `ChatAgent` | 124 |
+| `src/prompts.py` | the analysis template + its fixed 5-section output format | 89 |
+| `src/knowledge.py` | attachment theory and Gottman, written out as text | 65 |
+| `src/llm_client.py` | the only network call in the project | 21 |
+| `src/config.py` | key loading, gateway URL, model name | 28 |
+| `web/app.py` | FastAPI routes | 160 |
+| `web/static/` | the 3D book — HTML, CSS, JS | 894 |
 
-`knowledge.py` deserves a note. It is not a retrieval system and does not
-pretend to be: it is a set of functions returning hand-written Chinese prose
-about attachment theory and the Gottman model, concatenated into the prompt.
-For a knowledge base this small and this static, a vector store would be
-strictly more machinery for strictly less predictability.
+`knowledge.py` is worth a note: it's not a vector database and doesn't pretend to
+be. It's a handful of functions returning hand-written prose that gets pasted
+into the prompt. For a knowledge base this small and this static, a retrieval
+system would be more moving parts for less predictability.
 
----
-
-## 5. The web layer is a second state machine
-
-Independently of the agent, the HTTP surface is itself a state machine over a
-session, and the presentation drew it out:
+### The web layer is a second state machine
 
 <div align="center">
-<img alt="Session state machine over the HTTP endpoints"
-     src="https://github.com/user-attachments/assets/0a4808c7-b16f-498e-ae93-6a9507aa2386" width="880">
+<img src="docs/slides/slide-06.png" width="880" alt="Session state machine over the HTTP endpoints">
 </div>
 
-> **Figure 4.** Every endpoint in `web/app.py` as a transition out of `Idle`,
-> with an explicit success and failure state for each.
-
-This one *is* a finite automaton, and genuinely so: the set of session states is
-fixed regardless of how long the user stays, and every failure edge returns to
-`Idle`. Two state machines at two layers, with different answers to the question
-in §3, is the most instructive thing in the project.
+Every endpoint in `web/app.py` is a transition out of `Idle`, each with an
+explicit success and failure state, and every failure edge comes back to `Idle`.
+This one is a real finite automaton: the set of session states doesn't grow no
+matter how long you stay on the page.
 
 ---
 
-## 6. The domain model
-
-The report is not free-form. `prompts.py` pins the model to two published
-frameworks and a fixed five-section Markdown structure, so that the output is
-comparable across runs rather than whatever the model felt like producing.
-
-<table>
-<tr>
-<td width="50%">
-<img alt="Attachment theory quadrant"
-     src="https://github.com/user-attachments/assets/892512b4-72ae-49a1-a0e2-a6a387e649dc">
-</td>
-<td width="50%">
-<img alt="Gottman's four horsemen and their antidotes"
-     src="https://github.com/user-attachments/assets/f40bd4f6-f7b5-4992-a288-72312aa1abe2">
-</td>
-</tr>
-<tr>
-<td><b>Figure 5.</b> Attachment style as two axes — anxiety and avoidance —
-giving four quadrants (secure, anxious, avoidant, disorganised). The agent is
-asked to place each party in one.</td>
-<td><b>Figure 6.</b> Gottman's four horsemen — criticism, contempt,
-defensiveness, stonewalling — each paired with its antidote. The antidotes are
-what the report's suggestions section is drawn from.</td>
-</tr>
-</table>
-
-Fixing the output format is what makes the system an analysis tool rather than a
-chatbot: `get_concept_guide()` is prepended to every report so the reader can
-check the classification against the definition that produced it.
-
----
-
-## 7. The interface
-
-Two modes, switched from the top-right of the page.
-
-**Consultation Mode** — the analysis path. The user supplies both names, the
-background, and the transcript; the FSM of §2 runs; a full report comes back and
-can be downloaded as Markdown.
-
-<div align="center">
-<img alt="Consultation Mode"
-     src="https://github.com/user-attachments/assets/647b2ad4-15f9-4dcc-9049-afd9428a1ebf" width="880">
-</div>
-
-**Conversation Mode** — `ChatAgent`, a plain multi-turn chat that keeps a
-`history` list and resends it each turn. No FSM, no chunking; it is the control
-condition that shows what the analysis path is buying.
-
-<div align="center">
-<img alt="Conversation Mode"
-     src="https://github.com/user-attachments/assets/3f7c5deb-fb92-4179-b9b4-8729f481be3d" width="880">
-</div>
-
-The full presentation deck is in [`docs/presentation.md`](docs/presentation.md).
-
----
-
-## 8. Discussion and limitations
-
-Reviewing our own code after the fact turned up more than we expected. These are
-in rough order of how much they matter.
-
-**The chunking does not actually reduce the final prompt.** This is the big one.
-`INIT` and `PROCESS_CHUNK` exist to avoid sending the whole transcript at once —
-and then `build_final_prompt` sends it anyway:
-
-```python
-return ANALYSIS_SYSTEM_PROMPT.format(
-    user_name=self.user_name,
-    partner_name=self.partner_name,
-    context=enhanced_context,    # the per-chunk summaries
-    chat_logs=self.chat_logs     # ← and the entire raw transcript, again
-)
-```
-
-So the `AGGREGATE` call carries both the extracted features *and* the full text.
-The token-limit problem the state machine was designed to solve is still present
-in the very state that was supposed to have solved it, and the chunking pass has
-made the final prompt *larger* than the naive one-shot version, not smaller.
-The fix is one argument: pass `chat_logs=""`, or a short excerpt, and let the
-summaries carry the content. We did not notice this during development because
-every transcript we tested with fit in the window anyway — which is exactly the
-input class where the design is not needed.
-
-**A failed API call silently shrinks the evidence.** `get_completion` returns
-`None` on any exception, and `PROCESS_CHUNK` handles that with `if partial:` —
-the chunk is skipped and the loop moves on. One transient network error means
-the final report is written from a strict subset of the conversation, with
-nothing in the output indicating it. There is no retry and no timeout on
-`requests.post`, so a hung gateway hangs the request. The state machine should
-have an `ERROR` state, or `partial_results` should record the gap explicitly.
-
-**`temperature=0.7` on a classification task.** The same transcript can be
-classified as anxious on one run and avoidant on the next. For a system that
-names a psychological pattern in a specific, named person, non-determinism is
-not a stylistic choice. `temperature=0` for the `AGGREGATE` call, keeping 0.7
-for Conversation Mode, would cost nothing.
-
-**Chunking by line count is a poor proxy for tokens.** `max_lines=50` treats a
-50-line exchange of "ok" and a 50-line exchange of paragraphs as the same size.
-A token count, or even a character budget, would be both simpler to reason about
-and closer to the actual constraint.
-
-**`ChatAgent` has the problem `PsychAgent` was built to solve.** Its `history`
-list grows without bound and is resent in full every turn. A long enough
-conversation walks into the same context limit, in the same file, with the
-solution sitting 60 lines above it.
-
-**The original README claimed capabilities the code does not have.** It listed
-"Function Calling", "Tool Usage: the LLM dynamically decides whether to perform
-psychological analysis or conflict mining", and a "Dual-Tool Architecture".
-There is no tool or function-calling anywhere in the repository — `grep -r` for
-`tools=` or `function_call` returns nothing. There are two prompt templates
-selected by ordinary Python control flow. The claim has been removed rather than
-quietly dropped, because the difference between an agent that chooses a tool and
-a program that calls a function is most of what "agent" is supposed to mean.
-
-**A one-character typo published eleven private reports.** `.gitignore` read
-`web_report/*`; the directory is `web_reports/`. The pattern therefore matched
-nothing, and eleven generated reports — containing real names and real chat
-excerpts from members of this project and their acquaintances — were committed
-to a public repository. `.env` was committed for the same class of reason. Both
-have now been removed from tracking and `.gitignore` rewritten, but *removal
-from `HEAD` is not removal from history*: the objects remain reachable from
-earlier commits, so the gateway key has been rotated and a history rewrite is
-the only complete fix. The general lesson is that a `.gitignore` entry is
-untested code — nothing tells you when a pattern silently matches nothing.
-
-**`config.py` raises at import time.** `LLM_API_KEY = get_api_key()` runs at
-module scope, so `import src.agent` fails with `ValueError` on any machine
-without a key — including a machine that only wants to run tests. Key loading
-belongs in a function called at first use.
-
-**`requirements.txt` is incomplete.** `src/config.py` imports `python-dotenv`
-directly, but the package is listed nowhere; it installs only as a transitive
-dependency of `uvicorn[standard]`. A `pip install fastapi requests markdown`
-environment would fail at import.
-
-**No evaluation.** There is no ground truth, no inter-rater agreement, and no
-way to say whether the classifications are right. The system produces a
-confident report about a real relationship and has no measured accuracy
-whatsoever. This is a course project and was never deployed to anyone outside
-the team, but it should be said plainly rather than left for the reader to
-notice.
-
----
-
-## 9. Building and running
+## Run it yourself
 
 ```bash
 git clone https://github.com/pukyle/2025Theory_Of_Computation_Final_Project.git
 cd 2025Theory_Of_Computation_Final_Project
 
-python -m venv .venv && source .venv/bin/activate    # Windows: .venv\Scripts\activate
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-cp .env.example .env        # then put your gateway key in it
-python main.py              # → http://localhost:8000
+cp .env.example .env      # put your gateway key in it
+python main.py            # → http://localhost:8000
 ```
 
-`main.py` starts uvicorn on `0.0.0.0:8000`; `uvicorn web.app:app --reload` is
-the equivalent for development. The key is read from `LLM_API_KEY`, falling back
-to an `API.txt` file in the repository root. Both are git-ignored — keep it that
-way.
+Needs Python 3.10+ and access to the NCKU CSIE model gateway
+(`api-gateway.netdb.csie.ncku.edu.tw`), which is reachable on the campus network.
+The key is read from `LLM_API_KEY`, falling back to an `API.txt` in the repo root.
+Both are git-ignored — please keep it that way (see below for why).
 
-Requires Python 3.10+ and network access to the NCKU CSIE model gateway
-(`api-gateway.netdb.csie.ncku.edu.tw`), which is reachable from the campus
-network.
-
-### Layout
-
-```text
-├── src/
-│   ├── agent.py          # PsychAgent (the FSM of §2) and ChatAgent
-│   ├── prompts.py        # the analysis template and its fixed output format
-│   ├── knowledge.py      # attachment theory + Gottman, as literal text
-│   ├── llm_client.py     # the only network call in the project
-│   ├── config.py         # key loading, gateway URL, model name
-│   └── interface/        # WebAgent / CliAgent wrappers over PsychAgent
-├── web/
-│   ├── app.py            # FastAPI routes (the state machine of §5)
-│   └── static/           # the 3D-book front end
-├── docs/
-│   ├── figures/          # figures 1–2, generated by scripts/make_figures.py
-│   └── presentation.md   # the full slide deck
-├── scripts/make_figures.py
-└── main.py
-```
-
-Figures 1 and 2 are generated, not drawn: `python scripts/make_figures.py`
-rebuilds them from the state table in `agent.py`, in light and dark variants.
+The hosted demo sleeps after 15 minutes idle, so the first request can take
+30–60 seconds to wake the container. It hasn't crashed, it's just yawning.
 
 ---
 
-## 10. References
+## Things we got wrong
 
-1. J. E. Hopcroft, R. Motwani, J. D. Ullman. *Introduction to Automata Theory,
-   Languages, and Computation*, 3rd ed. Chapters 2 (finite automata) and 11
-   — the transducer model of §3.
-2. M. Sipser. *Introduction to the Theory of Computation*, 3rd ed. §1.1,
-   on what a finite automaton's memory is and is not.
-3. J. Bowlby. *Attachment and Loss, Vol. 1: Attachment.* Basic Books, 1969.
-4. C. Hazan, P. Shaver. "Romantic love conceptualized as an attachment
-   process." *Journal of Personality and Social Psychology*, 52(3), 1987.
-5. J. M. Gottman, N. Silver. *The Seven Principles for Making Marriage Work.*
-   Harmony Books, 1999 — the four horsemen and their antidotes.
-6. S. Johnson. *Hold Me Tight: Seven Conversations for a Lifetime of Love.*
-   Little, Brown, 2008 — the pursue–withdraw cycle.
+Going back through our own code months later turned up more than we expected.
+Leaving these in, because a project that says what broke is worth more than one
+that claims everything worked.
+
+**The chunking doesn't actually save any tokens.** This one hurts. `INIT` and
+`PROCESS_CHUNK` exist so the final call doesn't have to carry the whole
+transcript — and then `build_final_prompt` sends the whole transcript anyway:
+
+```python
+return ANALYSIS_SYSTEM_PROMPT.format(
+    context=enhanced_context,    # the per-chunk notes
+    chat_logs=self.chat_logs     # ← ...and the full raw transcript, again
+)
+```
+
+So the aggregate call carries the notes *plus* the original text, which makes it
+**bigger** than the naive one-shot version, not smaller. The fix is one argument.
+We never noticed because every transcript we tested with fit in the window
+anyway — exactly the case where the design isn't needed.
+
+**A dropped API call silently shrinks the evidence.** `get_completion` returns
+`None` on any error, and the loop handles that with `if partial:` — the chunk is
+skipped and it moves on. One network blip and the report is written from part of
+the conversation, with nothing in the output saying so. There should be an
+`ERROR` state.
+
+**`temperature=0.7` on a classification task.** The same transcript can come back
+"anxious" on one run and "avoidant" on the next. For something that names a
+psychological pattern in a specific person, that's not a stylistic choice.
+`temperature=0` for the aggregate call would cost nothing.
+
+**Chunking by line count is a bad proxy for tokens.** 50 lines of 「嗯」 and 50
+lines of paragraphs are not the same size.
+
+**`ChatAgent` has the exact problem `PsychAgent` was built to solve.** Its
+`history` list grows forever and gets resent in full every turn — the same
+context-window wall, in the same file, 60 lines below the solution.
+
+**The original README claimed things the code doesn't do.** It advertised
+"Function Calling" and a "Dual-Tool Architecture" where the LLM picks a tool.
+`grep -r` for `tools=` or `function_call` returns nothing. There are two prompt
+templates selected by ordinary `if` statements. Removed rather than quietly
+dropped, because the difference between an agent that chooses a tool and a
+program that calls a function is most of what "agent" is supposed to mean.
+
+**A one-character typo published eleven private reports.** `.gitignore` said
+`web_report/*`. The directory is `web_reports/`. The pattern matched nothing, and
+eleven generated reports — containing real names and real conversations, not the
+fictional ones above — went into a public repo, along with `.env`. Both have been
+untracked and `.gitignore` rewritten, but *removing a file from `HEAD` does not
+remove it from history*: the key has been rotated, and a full history rewrite is
+the only complete fix. A `.gitignore` entry is untested code — nothing tells you
+when a pattern silently matches zero files.
+
+**No evaluation.** No ground truth, no inter-rater agreement, no accuracy number.
+The system produces a confident report about a relationship and has never been
+measured against anything. It's a course project and was never given to anyone
+outside the team, but that should be said out loud rather than left for you to
+notice.
 
 ---
 
-## Provenance and attribution
+## Slides and reading
 
-Team project for *Theory of Computation* (2025), NCKU CSIE.
+- [`docs/presentation.md`](docs/presentation.md) — the full 18-slide deck as presented in class
+- [`docs/media/demo.mp4`](docs/media/demo.mp4) — the demo recording, as video
 
-| Member | Student ID | Principal contribution, by git history |
+**References.** Bowlby, *Attachment and Loss* (1969) · Hazan & Shaver, "Romantic
+love conceptualized as an attachment process" (1987) · Gottman & Silver, *The
+Seven Principles for Making Marriage Work* (1999) · Johnson, *Hold Me Tight*
+(2008) · Sipser, *Introduction to the Theory of Computation*, §1.1, for the bit
+about what a finite automaton's memory is and isn't.
+
+---
+
+## The team
+
+Theory of Computation (2025), NCKU CSIE.
+
+| | Student ID | Mostly worked on |
 | --- | --- | --- |
-| 王駿愷 (`JKaiWang`, `Jyun-Kai, Wang`) | F74122250 | FastAPI backend, the 3D-book front end, the `WebAgent` / `CliAgent` wrappers, and the largest share of `agent.py` |
-| 部政佑 (`pukyle`) | AN4126018 | `llm_client.py`, `config.py`, `main.py`, `prompts.py`; co-author of `agent.py` and `knowledge.py` |
-| 彭以呈 (`Peng Yi Cheng`) | F74122137 | `agent.py`, front-end integration |
+| **王駿愷** (`JKaiWang`) | F74122250 | FastAPI backend, the 3D book front end, the agent wrappers, most of `agent.py` |
+| **部政佑** (`pukyle`) | AN4126018 | `llm_client.py`, `config.py`, `main.py`, `prompts.py`; co-author of `agent.py` and `knowledge.py` |
+| **彭以呈** (`Peng Yi Cheng`) | F74122137 | `agent.py`, front-end integration |
 
-The table is a summary of `git log --format='%an' -- <path>`, not a claim beyond
-it; a few commits were made under machine-local usernames and are folded into
-the nearest author above.
+Summarised from `git log --format='%an' -- <path>`; a few commits were made under
+machine-local usernames and are folded into the nearest author.
 
-This README, the two generated figures in §2–§3, and the analysis in §3 and §8
-were written after the fact by **部政佑**
-([github.com/pukyle](https://github.com/pukyle)) and do not represent the
-original submitted report. The course handout and the graded rubric are not
-redistributed here.
+This README, the two generated figures, and the "things we got wrong" section were
+written after the fact by [部政佑](https://github.com/pukyle) and are not part of
+the original submission. The course handout is not redistributed here.
 
-> **A note on the reports.** This system generates psychological claims about
-> named private individuals from their private messages. During the project it
-> was run on real conversations belonging to members of the team and people they
-> know. Those outputs were committed to this repository by accident (§8) and
-> have been removed. Nothing in this repository should be read as a clinical
-> instrument, and neither of the two frameworks it uses was designed to be
-> applied by an unsupervised language model to a transcript without consent.
+> **One honest disclaimer.** This thing produces confident psychological claims
+> about real people from their private messages. It is a course project, not a
+> clinical instrument, and neither framework it uses was designed to be applied
+> by an unsupervised language model to someone's chat history without their
+> consent. The example above is fictional for exactly that reason.
